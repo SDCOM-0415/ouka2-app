@@ -23,49 +23,41 @@ use tower_http::cors::{Any, CorsLayer};
 use crate::radio::api::RadioApi;
 use crate::radio::models::{ServerStatus, Station};
 
-// 资源管理模块
-#[cfg(feature = "rust-embed")]
-mod assets {
-    use super::*;
-    use rust_embed::RustEmbed;
-
-    #[derive(RustEmbed)]
-    #[folder = "../dist"]
-    pub struct Assets;
-
-    pub async fn serve_static_asset(path: String) -> impl IntoResponse {
-        let path = path.trim_start_matches('/');
-        let asset = Assets::get(path).or_else(|| Assets::get("index.html"));
-
-        match asset {
-            Some(content) => {
-                let mime = mime_guess::from_path(path).first_or_octet_stream();
-                (
-                    [(header::CONTENT_TYPE, mime.as_ref())],
-                    content.data,
-                ).into_response()
-            }
-            None => (StatusCode::NOT_FOUND, "404 Not Found").into_response(),
-        }
-    }
-}
-
-#[cfg(not(feature = "rust-embed"))]
-mod assets {
-    use super::*;
-
-    pub async fn serve_static_asset(_path: String) -> impl IntoResponse {
-        // 当没有嵌入资源时，返回简单的响应
-        (StatusCode::NOT_IMPLEMENTED, "静态资源服务不可用").into_response()
-    }
-}
-
+// 静态资源处理
 async fn index_handler() -> impl IntoResponse {
     static_handler(Path("index.html".to_string())).await
 }
 
 async fn static_handler(Path(path): Path<String>) -> impl IntoResponse {
-    assets::serve_static_asset(path).await
+    let normalized_path = path.trim_start_matches('/');
+    
+    // 尝试从文件系统读取静态资源
+    // 注意：在服务器模式下，如果没有前端资源，我们返回一个简单的响应
+    let fs_path = format!("../dist/{}", normalized_path);
+    
+    // 尝试读取文件系统中的文件
+    if let Ok(content) = tokio::fs::read(&fs_path).await {
+        let mime = mime_guess::from_path(&fs_path).first_or_octet_stream();
+        (
+            [(header::CONTENT_TYPE, mime.as_ref())],
+            content,
+        ).into_response()
+    } else if normalized_path != "index.html" {
+        // 如果不是请求 index.html 且文件不存在，尝试加载 index.html
+        if let Ok(content) = tokio::fs::read("../dist/index.html").await {
+            let mime = mime_guess::from_path("index.html").first_or_octet_stream();
+            (
+                [(header::CONTENT_TYPE, mime.as_ref())],
+                content,
+            ).into_response()
+        } else {
+            // 如果连 index.html 都不存在，返回 501 表示静态资源服务不可用
+            (StatusCode::NOT_IMPLEMENTED, "静态资源服务不可用").into_response()
+        }
+    } else {
+        // 如果请求的就是 index.html 但不存在，返回 501
+        (StatusCode::NOT_IMPLEMENTED, "静态资源服务不可用").into_response()
+    }
 }
 
 /// 服务器共享状态
