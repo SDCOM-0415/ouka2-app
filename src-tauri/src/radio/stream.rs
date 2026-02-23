@@ -512,7 +512,6 @@ async fn handle_stations_api(
     headers: HeaderMap,
 ) -> impl IntoResponse {
     let stations = state.stations.read().await;
-    let port = *state.port.read().await;
     
     // 从请求头中获取主机信息
     let host_header = headers.get(axum::http::header::HOST)
