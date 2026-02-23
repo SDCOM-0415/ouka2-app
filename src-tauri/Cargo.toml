@@ -67,3 +67,8 @@ rand = "0.8"
 # 嵌入静态文件
 rust-embed = "8.5"
 mime_guess = "2.0"
+
+[[bin]]
+name = "ouka2-server"
+path = "src/bin/ouka2-server.rs"
+required-features = []
