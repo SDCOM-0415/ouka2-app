@@ -1,8 +1,8 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import type { Station, ServerStatus, CrawlProgress, ProvinceStats } from '../types'
+import { api } from '../api'
 
 export const useRadioStore = defineStore('radio', () => {
     // 状态
@@ -57,7 +57,14 @@ export const useRadioStore = defineStore('radio', () => {
 
     // 获取电台本地流地址
     const getStreamUrl = (stationId: string) => {
-        return `http://127.0.0.1:${serverStatus.value.port}/stream/${stationId}`
+        if (api.isTauri) {
+            return `http://127.0.0.1:${serverStatus.value.port}/stream/${stationId}`
+        } else {
+            // Web 模式下，使用当前 host
+            const host = window.location.hostname
+            const port = window.location.port || '80'
+            return `http://${host}:${port}/stream/${stationId}`
+        }
     }
 
     // 加载保存的电台数据
@@ -65,7 +72,7 @@ export const useRadioStore = defineStore('radio', () => {
         isLoading.value = true
         error.value = null
         try {
-            stations.value = await invoke<Station[]>('load_saved_stations')
+            stations.value = await api.loadStations()
         } catch (e) {
             error.value = String(e)
         } finally {
@@ -79,17 +86,21 @@ export const useRadioStore = defineStore('radio', () => {
         crawlProgress.value = null
         error.value = null
 
-        // 监听进度事件
-        const unlisten = await listen<CrawlProgress>('crawl-progress', (event) => {
-            crawlProgress.value = event.payload
-        })
+        let unlisten = () => {}
+        
+        if (api.isTauri) {
+            // 监听进度事件
+            unlisten = await listen<CrawlProgress>('crawl-progress', (event) => {
+                crawlProgress.value = event.payload
+            })
+        }
 
         try {
-            stations.value = await invoke<Station[]>('crawl_stations')
+            stations.value = await api.crawlStations()
         } catch (e) {
             error.value = String(e)
         } finally {
-            unlisten()
+            if (api.isTauri) unlisten()
             isCrawling.value = false
             crawlProgress.value = null
         }
@@ -98,7 +109,7 @@ export const useRadioStore = defineStore('radio', () => {
     // 启动服务器
     const startServer = async () => {
         try {
-            await invoke('start_server')
+            await api.startServer()
             await refreshServerStatus()
         } catch (e) {
             error.value = String(e)
@@ -108,7 +119,7 @@ export const useRadioStore = defineStore('radio', () => {
     // 停止服务器
     const stopServer = async () => {
         try {
-            await invoke('stop_server')
+            await api.stopServer()
             await refreshServerStatus()
         } catch (e) {
             error.value = String(e)
@@ -118,7 +129,7 @@ export const useRadioStore = defineStore('radio', () => {
     // 刷新服务器状态
     const refreshServerStatus = async () => {
         try {
-            serverStatus.value = await invoke<ServerStatus>('get_server_status')
+            serverStatus.value = await api.getServerStatus()
         } catch (e) {
             serverStatus.value.running = false
         }
@@ -126,23 +137,23 @@ export const useRadioStore = defineStore('radio', () => {
 
     // 生成 SII 文件
     const generateSii = async (): Promise<string> => {
-        return await invoke<string>('generate_sii')
+        return await api.generateSii()
     }
 
     // 安装到欧卡2
     const installToEts2 = async (): Promise<string> => {
-        return await invoke<string>('install_sii_to_ets2')
+        return await api.installToEts2()
     }
 
     // 获取欧卡2路径
     const getEts2Paths = async (): Promise<string[]> => {
-        return await invoke<string[]>('get_ets2_paths')
+        return await api.getEts2Paths()
     }
 
     // 检查 FFmpeg
     const checkFfmpeg = async () => {
         try {
-            ffmpegStatus.value = await invoke<string>('check_ffmpeg')
+            ffmpegStatus.value = await api.checkFfmpeg()
         } catch (e) {
             ffmpegStatus.value = null
             error.value = String(e)
@@ -151,7 +162,7 @@ export const useRadioStore = defineStore('radio', () => {
 
     // 获取省份统计
     const getProvinceStats = async (): Promise<ProvinceStats> => {
-        return await invoke<ProvinceStats>('get_province_statistics')
+        return await api.getProvinceStats()
     }
 
     return {

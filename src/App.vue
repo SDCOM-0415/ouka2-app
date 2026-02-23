@@ -164,7 +164,7 @@ onMounted(async () => {
           v-for="station in store.filteredStations"
           :key="station.id"
           :station="station"
-          :server-port="store.serverStatus.port"
+          :stream-url="store.getStreamUrl(station.id)"
           @play="handlePlay"
           @copy="handleCopy"
         />

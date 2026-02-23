@@ -2,6 +2,7 @@
 
 use std::path::PathBuf;
 use std::process::Command;
+#[cfg(feature = "desktop")]
 use tauri::Manager;
 
 /// FFmpeg 管理器
@@ -84,6 +85,7 @@ impl FFmpegManager {
 }
 
 /// 检查 FFmpeg 是否可用
+#[cfg(feature = "desktop")]
 #[tauri::command]
 pub fn check_ffmpeg(app_handle: tauri::AppHandle) -> Result<String, String> {
     // 获取资源目录，与 lib.rs 初始化时的逻辑保持一致

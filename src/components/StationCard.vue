@@ -4,7 +4,7 @@ import type { Station } from '../types'
 
 const props = defineProps<{
   station: Station
-  serverPort: number
+  streamUrl: string
 }>()
 
 const emit = defineEmits<{
@@ -12,18 +12,14 @@ const emit = defineEmits<{
   copy: [url: string]
 }>()
 
-const streamUrl = computed(() => {
-  return `http://127.0.0.1:${props.serverPort}/stream/${props.station.id}`
-})
-
 const handlePlay = () => {
   emit('play', props.station)
 }
 
 const handleCopy = async () => {
   try {
-    await navigator.clipboard.writeText(streamUrl.value)
-    emit('copy', streamUrl.value)
+    await navigator.clipboard.writeText(props.streamUrl)
+    emit('copy', props.streamUrl)
   } catch (e) {
     console.error('复制失败:', e)
   }

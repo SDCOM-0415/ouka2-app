@@ -10,6 +10,7 @@ use axum::{
     routing::get,
     Router,
 };
+use rust_embed::RustEmbed;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::process::Stdio;
@@ -22,6 +23,30 @@ use tower_http::cors::{Any, CorsLayer};
 
 use crate::radio::api::RadioApi;
 use crate::radio::models::{ServerStatus, Station};
+
+#[derive(RustEmbed)]
+#[folder = "../dist"]
+struct Assets;
+
+async fn index_handler() -> impl IntoResponse {
+    static_handler(Path("index.html".to_string())).await
+}
+
+async fn static_handler(Path(path): Path<String>) -> impl IntoResponse {
+    let path = path.trim_start_matches('/');
+    let asset = Assets::get(path).or_else(|| Assets::get("index.html"));
+
+    match asset {
+        Some(content) => {
+            let mime = mime_guess::from_path(path).first_or_octet_stream();
+            (
+                [(header::CONTENT_TYPE, mime.as_ref())],
+                content.data,
+            ).into_response()
+        }
+        None => (StatusCode::NOT_FOUND, "404 Not Found").into_response(),
+    }
+}
 
 /// 服务器共享状态
 pub struct ServerState {
@@ -150,6 +175,9 @@ impl StreamServer {
             .route("/stream/:id", get(handle_stream))
             .route("/health", get(handle_health))
             .route("/api/stations", get(handle_stations_api))
+            .route("/", get(index_handler))
+            .route("/index.html", get(index_handler))
+            .route("/*path", get(static_handler))
             .layer(CorsLayer::new().allow_origin(Any).allow_methods(Any))
             .with_state(state);
 

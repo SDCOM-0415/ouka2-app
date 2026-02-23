@@ -2,18 +2,23 @@
 //!
 //! 将云听电台转换为欧卡2可用格式的桌面应用
 
+#[cfg(feature = "desktop")]
 mod commands;
-mod radio;
-mod utils;
+pub mod radio;
+pub mod utils;
 
 use std::path::PathBuf;
 use std::sync::Arc;
+#[cfg(feature = "desktop")]
 use tauri::Manager;
 use tokio::sync::Mutex;
 
+#[cfg(feature = "desktop")]
 use commands::*;
 use radio::{Crawler, StreamServer};
-use utils::{FFmpegManager, check_ffmpeg};
+use utils::FFmpegManager;
+#[cfg(feature = "desktop")]
+use utils::check_ffmpeg;
 
 /// 应用全局状态
 pub struct AppState {
@@ -30,6 +35,7 @@ impl AppState {
     }
 }
 
+#[cfg(feature = "desktop")]
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // 初始化日志
@@ -55,7 +61,8 @@ pub fn run() {
                 .unwrap_or_else(|| PathBuf::from("ffmpeg"));
 
             // 创建应用状态
-            let state = Arc::new(Mutex::new(AppState::new(data_dir, ffmpeg_path, 3000)));
+            // 默认端口 3001，如果被占用会自动递增
+            let state = Arc::new(Mutex::new(AppState::new(data_dir, ffmpeg_path, 3001)));
 
             // 管理状态
             app.manage(state.clone());
@@ -95,4 +102,91 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+/// 以服务器模式运行（无 GUI）
+pub async fn run_server_mode(port: u16, data_dir: Option<PathBuf>, ffmpeg_path: Option<PathBuf>) {
+    // 初始化日志
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+
+    log::info!("🚀 正在启动无头服务器模式...");
+
+    // 1. 确定数据目录
+    let data_dir = data_dir.unwrap_or_else(|| {
+        let path = std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")).join("data");
+        log::info!("   未指定数据目录，使用默认: {:?}", path);
+        path
+    });
+
+    // 确保目录存在
+    if let Err(e) = std::fs::create_dir_all(&data_dir) {
+        log::error!("❌ 无法创建数据目录: {}", e);
+        return;
+    }
+
+    // 2. 确定 FFmpeg 路径
+    let ffmpeg_path = ffmpeg_path.unwrap_or_else(|| {
+        // 尝试检测
+        FFmpegManager::detect_ffmpeg(None).unwrap_or_else(|| PathBuf::from("ffmpeg"))
+    });
+    
+    log::info!("   FFmpeg 路径: {:?}", ffmpeg_path);
+
+    // 3. 创建应用状态
+    let state = Arc::new(Mutex::new(AppState::new(data_dir.clone(), ffmpeg_path, port)));
+
+    // 4. 加载数据
+    {
+        let state = state.lock().await;
+        if let Ok(stations) = state.crawler.load_stations() {
+            if !stations.is_empty() {
+                state.crawler.set_stations(stations.clone()).await;
+                state.server.state().load_stations(stations).await;
+                log::info!("✅ 已加载保存的电台数据");
+            } else {
+                log::info!("   没有保存的电台数据");
+            }
+        }
+    }
+
+    // 5. 启动服务器
+    log::info!("🔄 正在启动 Web 服务...");
+    {
+        let mut state_guard = state.lock().await;
+        if let Err(e) = state_guard.server.start().await {
+            log::error!("❌ 服务器启动失败: {}", e);
+            return;
+        }
+    }
+
+    // 获取实际端口
+    let actual_port = {
+        let state = state.lock().await;
+        *state.server.state().port.read().await
+    };
+
+    println!("\n========================================================");
+    println!("   欧卡2中国电台 - 服务器模式");
+    println!("   Web 访问地址: http://127.0.0.1:{}", actual_port);
+    println!("   数据目录: {:?}", data_dir);
+    println!("   按 Ctrl+C 停止服务器");
+    println!("========================================================\n");
+
+    // 6. 等待退出信号
+    match tokio::signal::ctrl_c().await {
+        Ok(()) => {
+            log::info!("🛑 收到退出信号，正在停止...");
+        }
+        Err(err) => {
+            log::error!("❌ 监听 Ctrl+C 失败: {}", err);
+        }
+    }
+
+    // 7. 清理资源
+    {
+        let mut state = state.lock().await;
+        state.server.stop().await;
+    }
+    
+    log::info!("👋 再见！");
 }
