@@ -67,7 +67,7 @@ mime_guess = "2.0"
 
 [features]
 default = ["desktop"]
-desktop = ["tauri", "tauri-plugin-opener", "tauri-build", "rust-embed", "mime_guess"]
+desktop = ["tauri", "tauri-plugin-opener", "tauri-build", "rust-embed"]
 server = []
 
 [[bin]]
