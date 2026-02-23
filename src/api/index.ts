@@ -139,7 +139,7 @@ export const api = {
         }
     },
 
-    listenCrawlProgress(callback: (progress: CrawlProgress) => void): () => void {
+    listenCrawlProgress(_callback: (progress: CrawlProgress) => void): () => void {
         if (isTauri) {
             // 需要异步引入 listen，这里简化处理，或者由调用方处理
             // 这里返回一个空的 cleanup 函数
