@@ -156,12 +156,12 @@ pub async fn run_server_mode(port: u16, data_dir: Option<PathBuf>, ffmpeg_path: 
                 });
                 
                 if !new_stations.is_empty() {
-                    state.crawler.set_stations(new_stations.clone()).await;
-                    state.server.state().load_stations(new_stations).await;
-                    log::info!("✅ 爬取完成，共 {} 个电台", new_stations.len());
-                } else {
-                    log::warn!("   ⚠️ 爬取结果为空");
-                }
+                     state.crawler.set_stations(new_stations.clone()).await;
+                     state.server.state().load_stations(new_stations.clone()).await;
+                     log::info!("✅ 爬取完成，共 {} 个电台", new_stations.len());
+                 } else {
+                     log::warn!("   ⚠️ 爬取结果为空");
+                 }
             }
         } else {
             log::info!("   开始爬取电台数据...");
@@ -177,7 +177,7 @@ pub async fn run_server_mode(port: u16, data_dir: Option<PathBuf>, ffmpeg_path: 
             
             if !new_stations.is_empty() {
                 state.crawler.set_stations(new_stations.clone()).await;
-                state.server.state().load_stations(new_stations).await;
+                state.server.state().load_stations(new_stations.clone()).await;
                 log::info!("✅ 爬取完成，共 {} 个电台", new_stations.len());
             } else {
                 log::warn!("   ⚠️ 爬取结果为空");
