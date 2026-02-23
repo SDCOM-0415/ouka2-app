@@ -507,15 +507,29 @@ async fn handle_health(State(state): State<Arc<ServerState>>) -> impl IntoRespon
 }
 
 /// 电台列表 API
-async fn handle_stations_api(State(state): State<Arc<ServerState>>) -> impl IntoResponse {
+async fn handle_stations_api(
+    State(state): State<Arc<ServerState>>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
     let stations = state.stations.read().await;
     let port = *state.port.read().await;
+    
+    // 从请求头中获取主机信息
+    let host_header = headers.get(axum::http::header::HOST)
+        .and_then(|h| h.to_str().ok())
+        .unwrap_or_else(|| "127.0.0.1");
+    
+    // 检查 X-Forwarded-Proto 头以确定原始协议（通常由反向代理设置）
+    let proto = headers.get("X-Forwarded-Proto")
+        .and_then(|h| h.to_str().ok())
+        .unwrap_or("http"); // 默认为 http
+    
     let mut list: Vec<_> = stations
         .values()
         .map(|s| {
             let mut s = s.clone();
-            // 添加本地流地址
-            s.mp3_play_url_high = Some(format!("http://127.0.0.1:{}/stream/{}", port, s.id));
+            // 使用实际访问的协议和主机
+            s.mp3_play_url_high = Some(format!("{}://{}/stream/{}", proto, host_header, s.id));
             s
         })
         .collect();
@@ -529,7 +543,7 @@ async fn handle_stations_api(State(state): State<Arc<ServerState>>) -> impl Into
         province: "bilibili".to_string(),
         play_url_low: None,
         mp3_play_url_low: None,
-        mp3_play_url_high: Some(format!("http://127.0.0.1:{}/stream/guodegang_radio", port)),
+        mp3_play_url_high: Some(format!("{}://{}/stream/guodegang_radio", proto, host_header)),
     });
     
     axum::Json(list)
