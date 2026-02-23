@@ -5,13 +5,12 @@
 use axum::{
     body::Body,
     extract::{Path, State},
-    http::{header, StatusCode},
+    http::{header, HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     routing::get,
     Router,
 };
-use std::collections::HashMap;
-use std::cmp::Ordering;
+use indexmap::IndexMap;
 use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::Arc;
@@ -64,7 +63,7 @@ async fn static_handler(Path(path): Path<String>) -> impl IntoResponse {
 /// 服务器共享状态
 pub struct ServerState {
     /// 电台列表
-    pub stations: RwLock<HashMap<String, Station>>,
+    pub stations: RwLock<IndexMap<String, Station>>,
     /// 活动的 FFmpeg 进程
     pub active_streams: RwLock<HashMap<String, u32>>, // station_id -> process_id
     /// 服务器端口（可动态更新）
@@ -78,7 +77,7 @@ pub struct ServerState {
 impl ServerState {
     pub fn new(port: u16, ffmpeg_path: PathBuf) -> Self {
         Self {
-            stations: RwLock::new(HashMap::new()),
+            stations: RwLock::new(IndexMap::new()),
             active_streams: RwLock::new(HashMap::new()),
             port: RwLock::new(port),
             ffmpeg_path,
@@ -88,10 +87,10 @@ impl ServerState {
 
     /// 加载电台数据
     pub async fn load_stations(&self, stations: Vec<Station>) {
-        let mut map = self.stations.write().await;
-        map.clear();
+        let mut stations_map = self.stations.write().await;
+        stations_map.clear();
         for station in stations {
-            map.insert(station.id.clone(), station);
+            stations_map.insert(station.id.clone(), station);
         }
     }
 
@@ -188,6 +187,7 @@ impl StreamServer {
             .route("/stream/:id", get(handle_stream))
             .route("/health", get(handle_health))
             .route("/api/stations", get(handle_stations_api))
+            .route("/api/generate_sii", get(handle_generate_sii))
             .route("/", get(index_handler))
             .route("/index.html", get(index_handler))
             .route("/*path", get(static_handler))
@@ -454,6 +454,51 @@ fn spawn_ffmpeg(ffmpeg_path: &PathBuf, stream_url: &str) -> anyhow::Result<Child
     Ok(child)
 }
 
+/// 生成 SII 配置文件 API
+async fn handle_generate_sii(
+    State(state): State<Arc<ServerState>>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    use crate::radio::SiiGenerator;
+
+    let stations = state.stations.read().await;
+
+    // 从请求头中获取主机信息，用于生成正确的 URL
+    let host_header = headers.get(axum::http::header::HOST)
+        .and_then(|h| h.to_str().ok())
+        .unwrap_or_else(|| "127.0.0.1");
+
+    // 检查 X-Forwarded-Proto 头以确定原始协议（通常由反向代理设置）
+    let proto = headers.get("X-Forwarded-Proto")
+        .and_then(|h| h.to_str().ok())
+        .unwrap_or("http"); // 默认为 http
+
+    // 创建 SII 生成器，使用实际访问的主机
+    let generator = SiiGenerator::new(host_header, 0); // 端口号实际上不会在相对协议 URL 中使用
+
+    // 为每个电台创建带正确 URL 的列表
+    let stations_with_correct_urls: Vec<_> = stations
+        .values()
+        .map(|s| {
+            let mut s = s.clone();
+            // 使用完整协议 URL，基于实际访问的协议和主机
+            s.mp3_play_url_high = Some(format!("{}://{}/stream/{}", proto, host_header, s.id));
+            s
+        })
+        .collect();
+
+    let content = generator.generate_for_web(&stations_with_correct_urls);
+
+    (
+        StatusCode::OK,
+        [
+            (header::CONTENT_TYPE, "application/octet-stream"),
+            (header::CONTENT_DISPOSITION, "attachment; filename=\"live_streams.sii\""),
+        ],
+        content,
+    )
+}
+
 /// 健康检查端点
 async fn handle_health(State(state): State<Arc<ServerState>>) -> impl IntoResponse {
     let status = state.get_status().await;
@@ -473,17 +518,6 @@ async fn handle_stations_api(State(state): State<Arc<ServerState>>) -> impl Into
             s
         })
         .collect();
-    
-    // 按省份排序：央广优先，其他按中文名称排序
-    list.sort_by(|a, b| {
-        if a.province == "央广" {
-            Ordering::Less
-        } else if b.province == "央广" {
-            Ordering::Greater
-        } else {
-            a.province.cmp(&b.province)  // 基本字符串比较，可以进一步优化为中文排序
-        }
-    });
     
     // 添加郭德纲电台
     list.push(Station {

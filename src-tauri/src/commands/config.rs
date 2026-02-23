@@ -9,7 +9,11 @@ use crate::AppState;
 
 /// 生成 SII 配置文件
 #[tauri::command]
-pub async fn generate_sii(state: State<'_, Arc<Mutex<AppState>>>) -> Result<String, String> {
+pub async fn generate_sii(
+    state: State<'_, Arc<Mutex<AppState>>>,
+    host: Option<String>,
+    port: Option<u16>,
+) -> Result<String, String> {
     let state = state.lock().await;
 
     let stations = state.crawler.get_stations().await;
@@ -17,7 +21,11 @@ pub async fn generate_sii(state: State<'_, Arc<Mutex<AppState>>>) -> Result<Stri
         return Err("没有电台数据，请先爬取电台".to_string());
     }
 
-    let generator = SiiGenerator::default();
+    // 如果提供了主机和端口，则使用提供的值；否则使用默认值
+    let server_host = host.unwrap_or_else(|| "127.0.0.1".to_string());
+    let server_port = port.unwrap_or(3000);
+
+    let generator = SiiGenerator::new(&server_host, server_port);
     let content = generator.generate(&stations);
 
     // 保存到数据目录

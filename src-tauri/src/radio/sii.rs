@@ -62,6 +62,51 @@ live_stream_def : .live_streams {{
         content
     }
 
+    /// 生成 SII 文件内容（适用于 Web 环境，使用完整协议 URL）
+    pub fn generate_for_web(&self, stations: &[Station]) -> String {
+        let mut content = format!(
+            r#"SiiNunit
+{{
+# 欧卡2中国电台配置文件
+# 通过 Web 服务器自动生成
+# 生成时间: {}
+#
+# 使用说明:
+# 1. 将此文件保存到欧卡2配置目录
+# 2. 本配置使用完整协议 URL，匹配实际访问协议
+# 3. 重启游戏即可在电台列表中看到中国电台
+
+live_stream_def : .live_streams {{
+ stream_data: {}
+"#,
+            chrono::Local::now().format("%Y-%m-%d %H:%M:%S"),
+            stations.len()
+        );
+
+        // 添加每个电台
+        for (index, station) in stations.iter().enumerate() {
+            // 直接使用 URL（包含协议部分），因为现在我们已经有了正确的协议
+            let stream_url = if let Some(ref url) = station.mp3_play_url_high {
+                url.clone()
+            } else {
+                // 构建相对协议 URL
+                format!("{}:{}/stream/{}", self.server_host, self.server_port, station.id)
+            };
+
+            let genre = self.get_genre(station);
+
+            // SII格式: stream_data[index]: "URL|Name|Genre|Language|Bitrate|Favorite"
+            // 欧卡2支持UTF-8编码的中文名称
+            content.push_str(&format!(
+                " stream_data[{}]: \"{}|{}|{}|CN|128|0\"\n",
+                index, stream_url, station.name, genre
+            ));
+        }
+
+        content.push_str("}\n}\n");
+        content
+    }
+
     /// 保存到文件
     pub fn save_to_file(&self, content: &str, path: &Path) -> anyhow::Result<()> {
         // 确保目录存在
