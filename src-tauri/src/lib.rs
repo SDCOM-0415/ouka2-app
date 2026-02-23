@@ -135,16 +135,52 @@ pub async fn run_server_mode(port: u16, data_dir: Option<PathBuf>, ffmpeg_path: 
     // 3. 创建应用状态
     let state = Arc::new(Mutex::new(AppState::new(data_dir.clone(), ffmpeg_path, port)));
 
-    // 4. 加载数据
+    // 4. 加载并爬取数据
     {
         let state = state.lock().await;
-        if let Ok(stations) = state.crawler.load_stations() {
-            if !stations.is_empty() {
-                state.crawler.set_stations(stations.clone()).await;
-                state.server.state().load_stations(stations).await;
+        if let Ok(saved_stations) = state.crawler.load_stations() {
+            if !saved_stations.is_empty() {
+                state.crawler.set_stations(saved_stations.clone()).await;
+                state.server.state().load_stations(saved_stations).await;
                 log::info!("✅ 已加载保存的电台数据");
             } else {
-                log::info!("   没有保存的电台数据");
+                log::info!("   没有保存的电台数据，开始爬取...");
+                
+                // 爬取所有电台数据
+                let new_stations = state.crawler.crawl_all(|progress| {
+                    log::info!("   📻 爬取进度: {}/{} - {} (已找到 {} 个电台)", 
+                        progress.current, progress.total, progress.province, progress.stations_found);
+                }).await.unwrap_or_else(|e| {
+                    log::error!("   ❌ 爬取失败: {}", e);
+                    vec![]
+                });
+                
+                if !new_stations.is_empty() {
+                    state.crawler.set_stations(new_stations.clone()).await;
+                    state.server.state().load_stations(new_stations).await;
+                    log::info!("✅ 爬取完成，共 {} 个电台", new_stations.len());
+                } else {
+                    log::warn!("   ⚠️ 爬取结果为空");
+                }
+            }
+        } else {
+            log::info!("   开始爬取电台数据...");
+            
+            // 爬取所有电台数据
+            let new_stations = state.crawler.crawl_all(|progress| {
+                log::info!("   📻 爬取进度: {}/{} - {} (已找到 {} 个电台)", 
+                    progress.current, progress.total, progress.province, progress.stations_found);
+            }).await.unwrap_or_else(|e| {
+                log::error!("   ❌ 爬取失败: {}", e);
+                vec![]
+            });
+            
+            if !new_stations.is_empty() {
+                state.crawler.set_stations(new_stations.clone()).await;
+                state.server.state().load_stations(new_stations).await;
+                log::info!("✅ 爬取完成，共 {} 个电台", new_stations.len());
+            } else {
+                log::warn!("   ⚠️ 爬取结果为空");
             }
         }
     }
