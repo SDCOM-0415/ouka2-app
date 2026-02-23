@@ -57,3 +57,4 @@ temp/
 src-tauri/binaries/
 
 *.sii
+sii/
