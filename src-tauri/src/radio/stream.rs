@@ -11,6 +11,7 @@ use axum::{
     Router,
 };
 use std::collections::HashMap;
+use std::cmp::Ordering;
 use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::Arc;
@@ -472,6 +473,17 @@ async fn handle_stations_api(State(state): State<Arc<ServerState>>) -> impl Into
             s
         })
         .collect();
+    
+    // 按省份排序：央广优先，其他按中文名称排序
+    list.sort_by(|a, b| {
+        if a.province == "央广" {
+            Ordering::Less
+        } else if b.province == "央广" {
+            Ordering::Greater
+        } else {
+            a.province.cmp(&b.province)  // 基本字符串比较，可以进一步优化为中文排序
+        }
+    });
     
     // 添加郭德纲电台
     list.push(Station {
