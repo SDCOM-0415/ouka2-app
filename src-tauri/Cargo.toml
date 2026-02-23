@@ -62,7 +62,8 @@ rand = "0.8"
 
 # 嵌入静态文件 (可选，仅用于桌面模式)
 rust-embed = { version = "8.5", optional = true }
-mime_guess = { version = "2.0", optional = true }
+# MIME 类型检测（服务器必需）
+mime_guess = "2.0"
 
 [features]
 default = ["desktop"]
