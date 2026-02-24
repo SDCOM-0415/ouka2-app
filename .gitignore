@@ -58,3 +58,4 @@ src-tauri/binaries/
 
 *.sii
 sii/
+rustup-init.exe
