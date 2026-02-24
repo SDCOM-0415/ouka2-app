@@ -14,7 +14,7 @@ const os = require('os');
 // FFmpeg 下载配置
 const FFMPEG_CONFIGS = {
     'win32-x64': {
-        url: 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip',
+        url: 'https://ghdown.hydun.com/https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip',
         binary: 'ffmpeg.exe',
         archiveType: 'zip',
         extractPattern: /ffmpeg.*\/bin\/ffmpeg\.exe$/
