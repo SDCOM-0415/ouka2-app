@@ -36,8 +36,8 @@
 5.  **构建后端**:
     ```bash
     cd src-tauri
-    # 构建服务器专用版本 (禁用默认的 desktop 特性，移除 GUI 依赖)
-    cargo build --release --bin ouka2-server --no-default-features
+    # 构建服务器专用版本 (禁用默认的 desktop 特性，启用 server 特性)
+    cargo build --release --bin ouka2-server --no-default-features --features server
     ```
 
 6.  **获取产物**:

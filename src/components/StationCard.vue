@@ -16,9 +16,28 @@ const handlePlay = () => {
 }
 
 const handleCopy = async () => {
+  const text = props.streamUrl
   try {
-    await navigator.clipboard.writeText(props.streamUrl)
-    emit('copy', props.streamUrl)
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text)
+    } else {
+      // Fallback for non-secure contexts (HTTP)
+      const textArea = document.createElement("textarea")
+      textArea.value = text
+      textArea.style.position = "fixed"
+      textArea.style.left = "-9999px"
+      textArea.style.top = "0"
+      document.body.appendChild(textArea)
+      textArea.focus()
+      textArea.select()
+      try {
+        document.execCommand('copy')
+      } catch (err) {
+        console.error('Fallback copy failed:', err)
+      }
+      document.body.removeChild(textArea)
+    }
+    emit('copy', text)
   } catch (e) {
     console.error('复制失败:', e)
   }
