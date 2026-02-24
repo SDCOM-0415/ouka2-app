@@ -17,29 +17,60 @@ const handlePlay = () => {
 
 const handleCopy = async () => {
   const text = props.streamUrl
-  try {
+  
+  // 核心复制函数
+  const copyToClipboard = async (val: string) => {
+    // 1. 首先尝试现代 API
     if (navigator.clipboard && window.isSecureContext) {
-      await navigator.clipboard.writeText(text)
-    } else {
-      // Fallback for non-secure contexts (HTTP)
-      const textArea = document.createElement("textarea")
-      textArea.value = text
-      textArea.style.position = "fixed"
-      textArea.style.left = "-9999px"
-      textArea.style.top = "0"
-      document.body.appendChild(textArea)
-      textArea.focus()
-      textArea.select()
       try {
-        document.execCommand('copy')
-      } catch (err) {
-        console.error('Fallback copy failed:', err)
+        await navigator.clipboard.writeText(val)
+        return true
+      } catch (e) {
+        console.warn('Navigator clipboard failed, trying fallback...', e)
       }
-      document.body.removeChild(textArea)
     }
-    emit('copy', text)
+    
+    // 2. Fallback: 使用传统的 textarea + execCommand
+    const textArea = document.createElement("textarea")
+    textArea.value = val
+    
+    // 样式设置，确保其在页面中但不可见，且不会引起页面抖动
+    textArea.style.position = 'fixed'
+    textArea.style.left = '-9999px'
+    textArea.style.top = '0'
+    textArea.style.opacity = '0'
+    textArea.setAttribute('readonly', '') // 防止移动端弹出键盘
+    
+    document.body.appendChild(textArea)
+    
+    // 针对不同设备的选中处理
+    textArea.focus()
+    textArea.select()
+    // 移动端兼容
+    textArea.setSelectionRange(0, 999999)
+    
+    let success = false
+    try {
+      success = document.execCommand('copy')
+    } catch (err) {
+      console.error('execCommand failed:', err)
+    }
+    
+    document.body.removeChild(textArea)
+    return success
+  }
+
+  try {
+    const success = await copyToClipboard(text)
+    if (success) {
+      emit('copy', text)
+    } else {
+      // 如果都失败了，弹窗让用户手动复制
+      window.prompt('复制失败，请手动复制电台地址：', text)
+    }
   } catch (e) {
-    console.error('复制失败:', e)
+    console.error('复制逻辑出错:', e)
+    window.prompt('复制失败，请手动复制电台地址：', text)
   }
 }
 
